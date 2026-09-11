@@ -9,6 +9,8 @@ from api_consumer.retry import RetryPolicy
 class FakeCluster:
     """Every node answers from a per-host script, behind one shared httpx.Client.
 
+    Hosts are keyed by their normalized URL, the same form the client reports.
+
     A script entry is an HTTP status code, an exception to raise, or a ready-made
     httpx.Response. A GET answered with a status code of 200 carries the group id
     taken from the request path. When a script runs out the fake raises IndexError,
@@ -22,12 +24,13 @@ class FakeCluster:
         self.client = httpx.Client(transport=httpx.MockTransport(self._handle))
 
     def node(self, host, *, mutations=(), gets=()):
-        self.mutations[host] = list(mutations)
-        self.gets[host] = list(gets)
-        return NodeAPI(host, self.client)
+        node = NodeAPI(host, self.client)
+        self.mutations[node.host] = list(mutations)
+        self.gets[node.host] = list(gets)
+        return node
 
     def _handle(self, request):
-        host = request.url.host
+        host = f"{request.url.scheme}://{request.url.netloc.decode()}"
         self.calls.append((request.method, host))
         script = self.gets[host] if request.method == "GET" else self.mutations[host]
         answer = script.pop(0)
