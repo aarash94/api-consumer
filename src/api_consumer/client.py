@@ -78,6 +78,10 @@ class ClusterClient:
         """Create the group on every node where it is absent."""
         return self._apply("create", group_id, NodeState.PRESENT)
 
+    def delete_group(self, group_id: str) -> OperationResult:
+        """Delete the group from every node where it is present."""
+        return self._apply("delete", group_id, NodeState.ABSENT)
+
     def _apply(self, operation: str, group_id: str, desired: NodeState) -> OperationResult:
         if not group_id.strip():
             raise ValueError("group_id must contain at least one non-whitespace character")
