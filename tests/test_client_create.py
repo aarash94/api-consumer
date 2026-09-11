@@ -115,3 +115,44 @@ def test_blank_group_id_is_rejected_before_any_call(group_id):
     with pytest.raises(ValueError):
         client.create_group(group_id)
     assert fake.calls == []
+
+
+def test_post_timeout_confirmed_by_get_counts_as_created():
+    fake, client = cluster_with(
+        {A: ([404], [201]), B: ([404, 200], [httpx.ReadTimeout("t")]), C: ([404], [201])}
+    )
+    result = client.create_group("g1")
+    assert (result.changed, result.skipped) == (HOSTS, [])
+    assert fake.calls.count(("POST", B)) == 1
+
+
+def test_unresolved_node_is_reported_unknown_and_still_driven_back():
+    fake, client = cluster_with({A: ([404], [201, 200]), B: ([404, 503, 503, 503], [500, 200])})
+    with pytest.raises(ClusterOperationError) as info:
+        client.create_group("g1")
+    error = info.value
+    assert error.failed_host == B and error.cause.endswith("GET shows unknown")
+    assert error.compensation == {B: "restored", A: "restored"}
+    assert error.cluster_consistent is True
+    assert fake.calls[-2:] == [("DELETE", B), ("DELETE", A)]
+
+
+def test_rollback_retries_a_transient_failure_and_recovers():
+    fake, client = cluster_with({A: ([404, 200], [201, 500, 200]), B: ([404, 404], [400])})
+    with pytest.raises(ClusterOperationError) as info:
+        client.create_group("g1")
+    error = info.value
+    assert error.compensation == {B: "restored", A: "restored"}
+    assert error.states == {A: ABSENT, B: ABSENT, C: ABSENT}
+    assert fake.calls[-3:] == [("DELETE", A), ("GET", A), ("DELETE", A)]
+
+
+def test_rollback_hard_failure_is_reported_as_failed():
+    fake, client = cluster_with({A: ([404, 200], [201, 404]), B: ([404, 404], [400])})
+    with pytest.raises(ClusterOperationError) as info:
+        client.create_group("g1")
+    error = info.value
+    assert error.compensation == {B: "restored", A: "failed"}
+    assert error.states == {A: PRESENT, B: ABSENT, C: ABSENT}
+    assert error.cluster_consistent is False
+    assert str(error).endswith("rollback: http://b restored, http://a failed")
