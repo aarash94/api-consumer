@@ -95,3 +95,9 @@ def test_delete_404_then_get_present_is_a_hard_failure_without_retry():
 def test_unknown_is_not_a_valid_target():
     with pytest.raises(ValueError):
         drive(UNKNOWN, mutations=[])
+
+
+def test_delete_timeout_then_get_absent_is_success_with_no_second_delete():
+    result, calls, _ = drive(ABSENT, mutations=[TIMEOUT], gets=[404])
+    assert (result.reached, result.state) == (True, ABSENT)
+    assert calls == ["DELETE", "GET"]
