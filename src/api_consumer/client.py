@@ -2,6 +2,7 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Self
 
 import httpx
 
@@ -65,6 +66,7 @@ class ClusterClient:
         policy: RetryPolicy | None = None,
         client: httpx.Client | None = None,
     ) -> None:
+        self._owns_client = client is None
         self._client = client or httpx.Client(timeout=timeout)
         self._policy = policy or RetryPolicy()
         self._nodes = [NodeAPI(host, self._client) for host in hosts]
@@ -73,6 +75,17 @@ class ClusterClient:
         seen = [node.host for node in self._nodes]
         if len(set(seen)) != len(seen):
             raise ValueError(f"duplicate hosts: {seen}")
+
+    def close(self) -> None:
+        """Close the HTTP client, if this instance created it."""
+        if self._owns_client:
+            self._client.close()
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        self.close()
 
     def create_group(self, group_id: str) -> OperationResult:
         """Create the group on every node where it is absent."""

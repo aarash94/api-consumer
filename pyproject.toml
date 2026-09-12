@@ -12,6 +12,9 @@ dependencies = ["httpx>=0.27"]
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.5"]
 
+[project.scripts]
+api-consumer = "api_consumer.cli:main"
+
 [tool.ruff]
 line-length = 100
 src = ["src", "tests"]
