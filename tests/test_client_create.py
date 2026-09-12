@@ -109,8 +109,8 @@ def test_empty_or_duplicate_hosts_are_rejected(hosts):
         ClusterClient(hosts, client=FakeCluster().client)
 
 
-@pytest.mark.parametrize("group_id", ["", "   "])
-def test_blank_group_id_is_rejected_before_any_call(group_id):
+@pytest.mark.parametrize("group_id", ["", "   ", 123, None])
+def test_invalid_group_id_is_rejected_before_any_call(group_id):
     fake, client = cluster_with({})
     with pytest.raises(ValueError):
         client.create_group(group_id)

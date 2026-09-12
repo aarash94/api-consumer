@@ -59,7 +59,7 @@ with ClusterClient(["node1.example.com", "node2.example.com"], timeout=5.0) as c
 
 ## How it works
 
-The whole design rests on three words for what a node holds for a given group: `PRESENT`, `ABSENT` and `UNKNOWN`. `UNKNOWN` means the client could not prove either state: GET failed three times in a row, or answered with something that is not in the contract.
+The whole design rests on three words for what a node holds for a given group: `PRESENT`, `ABSENT` and `UNKNOWN`. `UNKNOWN` means the client could not prove either state: GET could not determine it within the retry budget, three attempts by default, or answered with something that is not in the contract.
 
 **Read before write.** The client asks every node for the group's state first. If any node is `UNKNOWN`, it stops there and changes nothing. You cannot safely undo later what you could not see now.
 
@@ -71,7 +71,7 @@ The whole design rests on three words for what a node holds for a given group: `
 
 **Ambiguous mutation outcomes are reconciled via GET.** A timeout, a connection error or a 5xx after POST or DELETE does not say whether the node applied the change. The client reads the node and lets the observed state decide. If the state is already the requested one, the write happened and the answer was lost. A `400` from POST and a `404` from DELETE are handled the same way, because the brief says a `400` may mean the group already exists and does not say what a `404` on DELETE means.
 
-**A mutation is repeated only with permission.** POST or DELETE is sent again only when all three hold: the previous answer was ambiguous, GET shows the node still in its old state, and attempts remain. Three attempts in total, with 0.1 s and then 0.2 s between them. A `400`, a `404` or any status outside the contract never leads to a second attempt: after the GET it is either already done or a hard failure.
+**A mutation is repeated only with permission.** POST or DELETE is sent again only when all three hold: the previous answer was ambiguous, GET shows the node still in its old state, and attempts remain. Three attempts in total, with 0.1 s and then 0.2 s between them. A `400` or a `404` never leads to a second attempt: after the GET it is either already done or a hard failure. Any status outside the contract is a hard failure.
 
 **Rollback is best-effort compensating rollback.** On failure the client walks the nodes it touched in reverse order and drives each one back to the state observed before the operation, using the same rules as the forward path. It never deletes a group that existed before a create, never recreates a group that was absent before a delete, and never touches a node it did not reach. A node whose last verified state is already its old state needs no call at all.
 
@@ -83,7 +83,7 @@ Where the brief is silent, this is what I chose.
 
 - A host is a bare hostname, optionally with a port, or a root `http://` / `https://` URL. Bare hostnames get `http://`. A trailing slash is tolerated; a path, query or fragment is rejected. An empty host list and duplicate hosts are rejected before any call.
 - A group id is any string with at least one non-whitespace character. It is sent unchanged in request bodies and percent-encoded in the GET path. Further naming rules belong to the server.
-- Only the documented success codes count as success. Any other status, including other 2xx codes, is checked with GET and never retried.
+- Only the documented success codes count as success. Any other status, including other 2xx codes, is a failure: the client reads the node once so the rollback knows its state, but never counts it as success and never retries.
 - A GET answering `200` with a missing or different `groupId` is a protocol failure: `UNKNOWN`, without retry. A node that answers wrongly does not get better by being asked again.
 - Every request has an explicit timeout, default 5 seconds. Backoff is fixed exponential without jitter.
 - Nothing else changes the same group while an operation runs. The API offers no concurrency control, so the client cannot detect a concurrent writer.
@@ -101,7 +101,7 @@ ruff check .
 ruff format --check .
 ```
 
-The tests use `httpx.MockTransport`, so nothing touches the network, and the retry policy takes an injected sleep function, so nothing waits. Every failure-path test asserts the exact sequence of HTTP calls, which is how "no blind retry" and "rollback touches only my nodes" are proven rather than assumed.
+The tests use `httpx.MockTransport`, so nothing touches the network, and the retry policy takes an injected sleep function, so nothing waits. Key failure-path tests assert the exact sequence of HTTP calls, which is how "no blind retry" and "rollback touches only my nodes" are proven rather than assumed.
 
 ## What I would add for production
 

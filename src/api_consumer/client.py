@@ -6,7 +6,7 @@ from typing import Self
 
 import httpx
 
-from api_consumer.node_api import NodeAPI, NodeState
+from api_consumer.node_api import NodeAPI, NodeState, normalize_host
 from api_consumer.retry import RetryPolicy, drive_node_to, observe
 
 
@@ -66,15 +66,15 @@ class ClusterClient:
         policy: RetryPolicy | None = None,
         client: httpx.Client | None = None,
     ) -> None:
+        normalized = [normalize_host(host) for host in hosts]
+        if not normalized:
+            raise ValueError("at least one host is required")
+        if len(set(normalized)) != len(normalized):
+            raise ValueError(f"duplicate hosts: {normalized}")
         self._owns_client = client is None
         self._client = client or httpx.Client(timeout=timeout)
         self._policy = policy or RetryPolicy()
-        self._nodes = [NodeAPI(host, self._client) for host in hosts]
-        if not self._nodes:
-            raise ValueError("at least one host is required")
-        seen = [node.host for node in self._nodes]
-        if len(set(seen)) != len(seen):
-            raise ValueError(f"duplicate hosts: {seen}")
+        self._nodes = [NodeAPI(host, self._client) for host in normalized]
 
     def close(self) -> None:
         """Close the HTTP client, if this instance created it."""
@@ -96,8 +96,8 @@ class ClusterClient:
         return self._apply("delete", group_id, NodeState.ABSENT)
 
     def _apply(self, operation: str, group_id: str, desired: NodeState) -> OperationResult:
-        if not group_id.strip():
-            raise ValueError("group_id must contain at least one non-whitespace character")
+        if not isinstance(group_id, str) or not group_id.strip():
+            raise ValueError("group_id must be a string with at least one non-whitespace character")
         before = {node.host: observe(node, group_id, self._policy) for node in self._nodes}
         for host, state in before.items():
             if state is NodeState.UNKNOWN:

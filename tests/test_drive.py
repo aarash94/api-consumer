@@ -107,3 +107,15 @@ def test_a_policy_without_attempts_is_rejected():
     node = FakeCluster().node("node1")
     with pytest.raises(ValueError):
         drive_node_to(node, "g1", PRESENT, RetryPolicy(max_attempts=0, sleep=lambda _: None))
+
+
+def test_undocumented_status_fails_even_when_get_shows_the_desired_state():
+    result, calls, slept = drive(PRESENT, mutations=[200], gets=[200])
+    assert (result.reached, result.state) == (False, PRESENT)
+    assert calls == ["POST", "GET"] and slept == []
+
+
+def test_delete_undocumented_status_fails_even_when_get_shows_absent():
+    result, calls, _ = drive(ABSENT, mutations=[403], gets=[404])
+    assert (result.reached, result.state) == (False, ABSENT)
+    assert calls == ["DELETE", "GET"]
