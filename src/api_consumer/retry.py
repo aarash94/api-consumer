@@ -45,9 +45,11 @@ def drive_node_to(
 ) -> DriveResult:
     """Send the mutation for `desired` and settle its outcome by the contract rules.
 
-    A documented success is trusted. Every other answer is followed by GET, and the
-    observed state decides. The mutation is sent again only after an ambiguous answer,
-    when GET shows the node still in its old state, and while attempts remain.
+    A documented success is trusted. Every other answer is followed by GET. After an
+    ambiguous answer or a clarifying 400/404 the observed state decides. A status outside
+    the contract is a failure whatever GET shows; the GET only records the node's state
+    for the rollback. The mutation is sent again only after an ambiguous answer, when GET
+    shows the node still in its old state, and while attempts remain.
     """
     if desired is NodeState.UNKNOWN:
         raise ValueError("desired state must be PRESENT or ABSENT")
@@ -64,6 +66,8 @@ def drive_node_to(
             f"{verb} was {outcome.value} (attempt {attempt} of {policy.max_attempts}), "
             f"GET shows {state.value}"
         )
+        if outcome is Outcome.UNEXPECTED:
+            return DriveResult(False, state, why)
         if state is desired:
             return DriveResult(True, desired, why)
         if outcome is Outcome.AMBIGUOUS and state is old and attempt < policy.max_attempts:
