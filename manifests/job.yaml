@@ -1,0 +1,21 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: api-consumer-create
+spec:
+  # A rerun is safe: the client skips nodes that already have the requested state.
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: api-consumer
+          image: api-consumer:latest
+          imagePullPolicy: IfNotPresent
+          # Use ["delete", "my-group"] to remove the group instead.
+          args: ["create", "my-group"]
+          envFrom:
+            - configMapRef:
+                name: api-consumer-config

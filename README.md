@@ -109,3 +109,25 @@ The tests use `httpx.MockTransport`, so nothing touches the network, and the ret
 - Bounded parallelism across nodes if latency matters more than the simplicity of sequential rollback.
 - A durable record of in-flight operations, so a crashed run can be resumed instead of rerun.
 - Structured logging and metrics around retries and rollbacks.
+
+## Docker
+
+```
+docker build -t api-consumer .
+docker run --rm api-consumer --help
+docker run --rm api-consumer create my-group --hosts node1.example.com,node2.example.com
+```
+
+The image is based on `python:3.12-slim`, installs the package, and runs as a non-root user. The entry point is the `api-consumer` command, so everything after the image name is passed to it.
+
+## Kubernetes
+
+The client performs one operation and exits, so it runs as a Job, not a Deployment. `manifests/configmap.yaml` holds the node list in `CLUSTER_HOSTS`; `manifests/job.yaml` runs `create my-group` against it. To delete instead, change the container args to `["delete", "my-group"]`.
+
+```
+kubectl apply --dry-run=client -f manifests/
+kubectl apply -f manifests/
+kubectl logs job/api-consumer-create
+```
+
+The Job allows two retries, which is safe because a rerun of the client converges instead of duplicating work. The image must be reachable by the cluster under `api-consumer:latest`; on a local kind cluster that is `kind load docker-image api-consumer:latest`. Tested on kind: the Job started, each attempt reported the unreachable example hosts and exited with code 1, and the Job ended as failed after its retries, which is the expected result without a real cluster API behind those hostnames.

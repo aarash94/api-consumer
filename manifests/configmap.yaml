@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-consumer-config
+data:
+  # Comma-separated cluster nodes, read by the CLI when --hosts is not given.
+  CLUSTER_HOSTS: "node1.example.com,node2.example.com,node3.example.com"
