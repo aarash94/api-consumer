@@ -4,7 +4,7 @@ import httpx
 import pytest
 
 from api_consumer.node_api import NodeState
-from api_consumer.retry import drive_node_to
+from api_consumer.retry import RetryPolicy, drive_node_to
 from fake_cluster import FakeCluster, recording_policy
 
 PRESENT, ABSENT, UNKNOWN = NodeState.PRESENT, NodeState.ABSENT, NodeState.UNKNOWN
@@ -101,3 +101,9 @@ def test_delete_timeout_then_get_absent_is_success_with_no_second_delete():
     result, calls, _ = drive(ABSENT, mutations=[TIMEOUT], gets=[404])
     assert (result.reached, result.state) == (True, ABSENT)
     assert calls == ["DELETE", "GET"]
+
+
+def test_a_policy_without_attempts_is_rejected():
+    node = FakeCluster().node("node1")
+    with pytest.raises(ValueError):
+        drive_node_to(node, "g1", PRESENT, RetryPolicy(max_attempts=0, sleep=lambda _: None))
