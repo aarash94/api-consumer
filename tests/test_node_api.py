@@ -64,6 +64,7 @@ def test_get_404_means_absent():
         respond(200, {"groupId": "other"}),
         respond(200, {"x": 1}),
         respond(200, [1]),
+        lambda request: httpx.Response(200, text="not json"),
         respond(204),
         respond(403),
     ],

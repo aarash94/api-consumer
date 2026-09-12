@@ -156,3 +156,13 @@ def test_rollback_hard_failure_is_reported_as_failed():
     assert error.states == {A: PRESENT, B: ABSENT, C: ABSENT}
     assert error.cluster_consistent is False
     assert str(error).endswith("rollback: http://b restored, http://a failed")
+
+
+def test_context_manager_closes_only_the_http_client_it_created():
+    shared = httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(404)))
+    with ClusterClient(["node1"], client=shared):
+        pass
+    assert not shared.is_closed
+    with ClusterClient(["node1"]) as owned:
+        pass
+    assert owned._client.is_closed
